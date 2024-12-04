@@ -112,6 +112,22 @@ $Script:Runtime = Measure-Command -Expression {
     return Get-Content -Path "$ClonePath\tools\Version.json" -ErrorAction SilentlyContinue | ConvertFrom-Json
   }
 
+  function Set-RecommendationControl {
+    param (
+        [string]$category
+    )
+
+    switch ($category) {
+        'BusinessContinuity' { return 'Business Continuity' }
+        'DisasterRecovery' { return 'Disaster Recovery' }
+        'MonitoringAndAlerting' { return 'Monitoring And Alerting' }
+        'ServiceUpgradeAndRetirement' { return 'Service Upgrade And Retirement' }
+        'OtherBestPractices' { return 'Other Best Practices' }
+        default { return $category }
+    }
+  }
+
+
   function Set-LocalFile {
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Low')]
     param()
@@ -298,6 +314,7 @@ $Script:Runtime = Measure-Command -Expression {
               'WAF Pillar'                                                                      = 'Reliability';
               tagged                                                                            = $Recom.tagged
             }
+            $Script:MergedRecommendation += $tmp
           } elseif ($Recom.validationAction -eq 'IMPORTANT - Resource Type is not available in either APRL or Advisor - Validate Resources manually if Applicable, if not Delete this line' ) {
             $tmp = @{
               'How was the resource/recommendation validated or what actions need to be taken?' = $Recom.validationAction;
@@ -321,15 +338,15 @@ $Script:Runtime = Measure-Command -Expression {
               'WAF Pillar'                                                                      = 'Reliability';
               tagged                                                                            = $Recom.tagged
             }
+            $Script:MergedRecommendation += $tmp
           }
-          $Script:MergedRecommendation += $tmp
         }
       }
     }
 
     $Script:RecommendedAdv = @()
     foreach ($adv in $CoreAdvisories) {
-      #if (![string]::IsNullOrEmpty($adv.recommendationId)) {
+      if (![string]::IsNullOrEmpty($adv.recommendationId)) {
         #$APRLADV = $Script:ServicesYAMLContent | Where-Object { $_.recommendationTypeId -eq $adv.recommendationId }
 
         #if ($APRLADV.recommendationTypeId -eq $adv.recommendationId ) {
@@ -363,16 +380,16 @@ $Script:Runtime = Measure-Command -Expression {
           $Script:MergedRecommendation += $tmp
           $Script:RecommendedAdv += $adv.recommendationId
         #}
-      #}
+      }
     }
 
     foreach ($WAF in $Script:WAFYAMLContent) {
       $tmp = @{
-        'How was the resource/recommendation validated or what actions need to be taken?' = 'Update this item based on Discovery Workshop Questionnaire';
+        'How was the resource/recommendation validated or what actions need to be taken?' = "IMPORTANT - Update this item based on Discovery Workshop Questionnaire";
         recommendationId                                                                  = [string]$WAF.aprlGuid;
         recommendationTitle                                                               = [string]$WAF.description;
         resourceType                                                                      = [string]$WAF.recommendationResourceType;
-        impact                                                                            = '';
+        impact                                                                            = [string]$WAF.recommendationImpact;
         subscriptionId                                                                    = '';
         resourceGroup                                                                     = '';
         name                                                                              = 'Entire Workload';
@@ -421,7 +438,7 @@ $Script:Runtime = Measure-Command -Expression {
       )
 
       $cond = @()
-      $cond += New-ConditionalText 'Update this item based on Discovery Workshop Questionnaire' -Range A:A
+      $cond += New-ConditionalText "IMPORTANT - Update this item based on Discovery Workshop Questionnaire" -Range A:A
       $cond += New-ConditionalText 'IMPORTANT' -Range A:A
 
       $cond2 = @()
@@ -720,6 +737,9 @@ $Script:Runtime = Measure-Command -Expression {
 
     function Add-Recommendation {
       ####################    Starts to process the main sheet
+      foreach ($item in $WAFYAML.recommendationControl) {
+        $item.category = Set-RecommendationControl -category $item.category
+      }
 
       foreach ($customRec in $Script:CustomYAMLContent) {
         $countFormula = 'COUNTIFS(ImpactedResources!D:D,"' + $customRec.aprlGuid + '",ImpactedResources!S:S,"' + $customRec.checkName + '")'
@@ -788,7 +808,7 @@ $Script:Runtime = Measure-Command -Expression {
             'Azure Service / Well-Architected Topic'                                                         = ($resourceType.split('/')[1]);
             'Recommendation Title'                                                                           = $advisor.description;
             'Impact'                                                                                         = $advisor.impact;
-            'Best Practices Guidance'                                                                        = '';
+            'Best Practices Guidance'                                                                        = $advisor.description;
             'Read More'                                                                                      = '';
             'Potential Benefits'                                                                             = '';
             'Add associated Outage TrackingID and/or Support Request # and/or Service Retirement TrackingID' = '';
@@ -1017,7 +1037,7 @@ $Script:Runtime = Measure-Command -Expression {
   }
 
   #Call the functions
-  $Script:Version = '2.1.12'
+  $Script:Version = '2.1.15'
   Write-Host 'Version: ' -NoNewline
   Write-Host $Script:Version -ForegroundColor DarkBlue
 
